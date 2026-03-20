@@ -951,8 +951,9 @@ body.map-fs-active .main-layout { z-index: 9999; }
   -webkit-mask-image: linear-gradient(90deg, transparent, black 3%, black 97%, transparent);
 }
 
-.breaking-scroll { display: inline-block; animation: scroll-left 30s linear infinite; padding-left: 100%; }
-.breaking-scroll span { font-size: 12px; font-weight: 500; color: var(--text-primary); margin-right: 60px; }
+.breaking-scroll { display: inline-block; animation: scroll-left 80s linear infinite; padding-left: 100%; }
+.breaking-scroll span { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-right: 80px; }
+.breaking-text:hover .breaking-scroll { animation-play-state: paused; }
 
 @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-100%); } }
 
