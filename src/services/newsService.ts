@@ -71,8 +71,18 @@ function cleanTitle(title: string): string {
   return title.replace(/\s*-\s*[^-]+$/, '').trim() || title;
 }
 
+const isLocal = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
 export async function fetchLiveNews(): Promise<NewsItem[]> {
   if (newsCache.length > 0 && Date.now() - lastNewsFetch < NEWS_CACHE_TTL) {
+    return newsCache;
+  }
+
+  // On static hosting, use offline news immediately
+  if (!isLocal()) {
+    newsCache = OFFLINE_NEWS();
+    breakingCache = newsCache.filter(n => n.severity === 'critical' || n.severity === 'high').slice(0, 8);
+    lastNewsFetch = Date.now();
     return newsCache;
   }
 
@@ -189,3 +199,40 @@ const FALLBACK_NEWS: NewsItem[] = [
   { id: 'f3', title: 'Weather data loading from Open-Meteo...', source: 'India Monitor', category: 'climate', timestamp: new Date(), severity: 'low' },
   { id: 'f4', title: 'Earthquake data loading from USGS...', source: 'India Monitor', category: 'disaster', timestamp: new Date(), severity: 'low' },
 ];
+
+// ─── Rich offline news for demo/static hosting ───
+function OFFLINE_NEWS(): NewsItem[] {
+  const ago = (h: number) => new Date(Date.now() - h * 3600_000);
+  return [
+    { id: 'o1', title: 'RBI keeps repo rate unchanged at 6.5% amid inflation concerns', source: 'Economic Times', category: 'economy', timestamp: ago(0.5), severity: 'critical' },
+    { id: 'o2', title: 'SENSEX crosses 78,000 mark for first time; IT stocks lead rally', source: 'Moneycontrol', category: 'economy', timestamp: ago(1), severity: 'high' },
+    { id: 'o3', title: 'IMD issues orange alert for heavy rainfall in Maharashtra and Gujarat', source: 'India Today', category: 'climate', timestamp: ago(1.5), severity: 'high' },
+    { id: 'o4', title: 'India successfully tests next-gen Agni-Prime ballistic missile', source: 'NDTV', category: 'defence', timestamp: ago(2), severity: 'critical' },
+    { id: 'o5', title: 'PM Modi inaugurates India\'s longest sea bridge connecting Mumbai', source: 'The Hindu', category: 'politics', timestamp: ago(2.5), severity: 'high' },
+    { id: 'o6', title: 'ISRO announces timeline for Gaganyaan crewed mission launch', source: 'Times of India', category: 'science', timestamp: ago(3), severity: 'high' },
+    { id: 'o7', title: 'UPI transactions cross 18 billion in monthly volume', source: 'Business Standard', category: 'economy', timestamp: ago(3.5), severity: 'medium' },
+    { id: 'o8', title: 'Indian Railways launches 50 new Vande Bharat routes this quarter', source: 'Hindustan Times', category: 'transport', timestamp: ago(4), severity: 'medium' },
+    { id: 'o9', title: 'Bengaluru Metro Phase 3 gets cabinet approval for ₹15,000 crore', source: 'Deccan Herald', category: 'transport', timestamp: ago(4.5), severity: 'medium' },
+    { id: 'o10', title: 'Chandrayaan-4 sample return mission enters design phase', source: 'Indian Express', category: 'science', timestamp: ago(5), severity: 'medium' },
+    { id: 'o11', title: 'Delhi AQI improves to moderate category after rainfall', source: 'NDTV', category: 'climate', timestamp: ago(5.5), severity: 'low' },
+    { id: 'o12', title: 'India\'s GDP growth estimated at 7.2% for current fiscal year', source: 'Reuters', category: 'economy', timestamp: ago(6), severity: 'high' },
+    { id: 'o13', title: 'Tata Semiconductor fab in Gujarat begins trial production', source: 'Economic Times', category: 'technology', timestamp: ago(6.5), severity: 'medium' },
+    { id: 'o14', title: 'Supreme Court directs states to implement EV charging infrastructure', source: 'LiveMint', category: 'politics', timestamp: ago(7), severity: 'medium' },
+    { id: 'o15', title: 'Nifty IT index surges 3% on strong quarterly earnings', source: 'Moneycontrol', category: 'economy', timestamp: ago(7.5), severity: 'medium' },
+    { id: 'o16', title: 'Earthquake of magnitude 4.2 hits Manipur, no casualties reported', source: 'Times of India', category: 'disaster', timestamp: ago(8), severity: 'high' },
+    { id: 'o17', title: 'India and Japan sign ₹75,000 crore bullet train phase 2 agreement', source: 'The Hindu', category: 'transport', timestamp: ago(9), severity: 'medium' },
+    { id: 'o18', title: 'FII net inflows cross $2.5 billion in current month', source: 'Business Standard', category: 'economy', timestamp: ago(10), severity: 'medium' },
+    { id: 'o19', title: 'Mumbai Metro Line 3 operational: Aqua Line connects airport to city', source: 'Hindustan Times', category: 'transport', timestamp: ago(11), severity: 'medium' },
+    { id: 'o20', title: 'India\'s renewable energy capacity crosses 200 GW milestone', source: 'Reuters', category: 'science', timestamp: ago(12), severity: 'medium' },
+    { id: 'o21', title: 'Parliament passes Digital India Act with data privacy provisions', source: 'Indian Express', category: 'politics', timestamp: ago(13), severity: 'high' },
+    { id: 'o22', title: 'Cyclone warning issued for Odisha and Andhra Pradesh coast', source: 'India Today', category: 'disaster', timestamp: ago(14), severity: 'critical' },
+    { id: 'o23', title: 'Adani Green commissions world\'s largest solar-wind hybrid plant', source: 'Economic Times', category: 'economy', timestamp: ago(15), severity: 'medium' },
+    { id: 'o24', title: 'Indian startups raise $3.8 billion in Q1 2026 funding', source: 'Inc42', category: 'technology', timestamp: ago(16), severity: 'medium' },
+    { id: 'o25', title: 'Air India inducts 25 new A350 aircraft, expands international routes', source: 'LiveMint', category: 'transport', timestamp: ago(17), severity: 'low' },
+    { id: 'o26', title: 'India\'s forex reserves reach all-time high of $690 billion', source: 'Reuters', category: 'economy', timestamp: ago(18), severity: 'medium' },
+    { id: 'o27', title: 'DRDO successfully tests indigenous anti-satellite weapon system', source: 'NDTV', category: 'defence', timestamp: ago(20), severity: 'high' },
+    { id: 'o28', title: 'Smart Cities Mission 2.0 launched covering 200 cities', source: 'The Hindu', category: 'politics', timestamp: ago(22), severity: 'medium' },
+    { id: 'o29', title: 'Coal India achieves record 900 MT production target', source: 'Business Standard', category: 'economy', timestamp: ago(24), severity: 'low' },
+    { id: 'o30', title: 'INS Vikrant carrier group completes maiden operational deployment', source: 'Hindustan Times', category: 'defence', timestamp: ago(26), severity: 'medium' },
+  ];
+}

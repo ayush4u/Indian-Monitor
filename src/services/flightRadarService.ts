@@ -35,8 +35,28 @@ const FLIGHT_CACHE_TTL = 15_000; // 15 seconds (OpenSky allows ~10 req/min witho
 // India bounding box
 const INDIA_BBOX = { lamin: 6, lomin: 68, lamax: 37, lomax: 98 };
 
+const isLocal = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
 export async function fetchLiveFlights(): Promise<FlightRadarSummary> {
   if (flightCache && Date.now() - lastFlightFetch < FLIGHT_CACHE_TTL) {
+    return flightCache;
+  }
+  // On static hosting, use fallback flights (no proxy available)
+  if (!isLocal()) {
+    if (!flightCache) {
+      const flights = generateFallbackFlights();
+      const airborne = flights.filter(f => !f.onGround);
+      flightCache = {
+        flights,
+        totalCount: flights.length,
+        airborne: airborne.length,
+        onGround: flights.length - airborne.length,
+        avgAltitude: Math.round(airborne.reduce((s, f) => s + f.altitude, 0) / Math.max(1, airborne.length)),
+        lastUpdated: new Date(),
+        isLive: false,
+      };
+    }
+    lastFlightFetch = Date.now();
     return flightCache;
   }
 

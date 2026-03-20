@@ -1,4 +1,5 @@
 // ─── India Monitor — Main Entry ───
+import 'leaflet/dist/leaflet.css';
 import './styles/main.css';
 
 import { createHeader, startClock } from './components/Header';
