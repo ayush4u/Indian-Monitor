@@ -73,9 +73,11 @@ async function fetchYahooQuote(symbol: string): Promise<{
   high: number; low: number; open: number; prevClose: number;
   volume: number; lastUpdated: string;
 } | null> {
-  if (!isLocal()) return null;
   try {
-    const url = `/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=false`;
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=false`;
+    const url = isLocal()
+      ? `/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=false`
+      : `https://corsproxy.io/?${encodeURIComponent(yahooUrl)}`;
     const res = await fetch(url);
     if (!res.ok) return null;
 

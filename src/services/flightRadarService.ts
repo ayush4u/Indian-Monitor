@@ -41,27 +41,12 @@ export async function fetchLiveFlights(): Promise<FlightRadarSummary> {
   if (flightCache && Date.now() - lastFlightFetch < FLIGHT_CACHE_TTL) {
     return flightCache;
   }
-  // On static hosting, use fallback flights (no proxy available)
-  if (!isLocal()) {
-    if (!flightCache) {
-      const flights = generateFallbackFlights();
-      const airborne = flights.filter(f => !f.onGround);
-      flightCache = {
-        flights,
-        totalCount: flights.length,
-        airborne: airborne.length,
-        onGround: flights.length - airborne.length,
-        avgAltitude: Math.round(airborne.reduce((s, f) => s + f.altitude, 0) / Math.max(1, airborne.length)),
-        lastUpdated: new Date(),
-        isLive: false,
-      };
-    }
-    lastFlightFetch = Date.now();
-    return flightCache;
-  }
 
   try {
-    const url = `/api/opensky/states/all?lamin=${INDIA_BBOX.lamin}&lomin=${INDIA_BBOX.lomin}&lamax=${INDIA_BBOX.lamax}&lomax=${INDIA_BBOX.lomax}`;
+    // OpenSky Network supports CORS for unauthenticated requests — call directly
+    const url = isLocal()
+      ? `/api/opensky/states/all?lamin=${INDIA_BBOX.lamin}&lomin=${INDIA_BBOX.lomin}&lamax=${INDIA_BBOX.lamax}&lomax=${INDIA_BBOX.lomax}`
+      : `https://opensky-network.org/api/states/all?lamin=${INDIA_BBOX.lamin}&lomin=${INDIA_BBOX.lomin}&lamax=${INDIA_BBOX.lamax}&lomax=${INDIA_BBOX.lomax}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`OpenSky ${res.status}`);
 
