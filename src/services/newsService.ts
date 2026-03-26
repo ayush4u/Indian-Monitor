@@ -78,19 +78,15 @@ export async function fetchLiveNews(): Promise<NewsItem[]> {
     return newsCache;
   }
 
-  // On static hosting, use offline news immediately
-  if (!isLocal()) {
-    newsCache = OFFLINE_NEWS();
-    breakingCache = newsCache.filter(n => n.severity === 'critical' || n.severity === 'high').slice(0, 8);
-    lastNewsFetch = Date.now();
-    return newsCache;
-  }
-
   const allNews: NewsItem[] = [];
 
   const fetches = RSS_FEEDS.map(async (feed) => {
     try {
-      const url = `/api/news/rss/search?q=${encodeURIComponent(feed.query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+      const params = `q=${encodeURIComponent(feed.query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+      const googleUrl = `https://news.google.com/rss/search?${params}`;
+      const url = isLocal()
+        ? `/api/news/rss/search?${params}`
+        : `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
       const res = await fetch(url);
       if (!res.ok) return [];
       const xml = await res.text();
@@ -117,8 +113,8 @@ export async function fetchLiveNews(): Promise<NewsItem[]> {
     return true;
   });
 
-  newsCache = deduped;
-  breakingCache = deduped.filter(n => n.severity === 'critical' || n.severity === 'high').slice(0, 8);
+  newsCache = deduped.length > 0 ? deduped : OFFLINE_NEWS();
+  breakingCache = newsCache.filter(n => n.severity === 'critical' || n.severity === 'high').slice(0, 8);
   lastNewsFetch = Date.now();
 
   return newsCache;
