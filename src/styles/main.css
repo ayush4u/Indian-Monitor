@@ -2021,3 +2021,5 @@ body.map-fs-active .main-layout { z-index: 9999; }
   .hub-table th:nth-child(6), .hub-table td:nth-child(6) { display: none; }
 }
 
+
+@media (max-width: 768px) { .hide-mobile { display: none !important; } }

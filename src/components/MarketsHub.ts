@@ -19,7 +19,7 @@ let currentAssets: {
   
 } | null = null;
 
-let activeTab: 'equity' | 'commodity' | 'currency' | 'crypto' = 'equity';
+let activeTab: 'equity' | 'commodity' | 'currency' | 'crypto' | 'ai_insights' = 'equity';
 let activeEquitySector = 'All';
 
 // Star icon SVG helper
@@ -92,6 +92,7 @@ export function createMarketsHub(): string {
           <button class="hub-tab" data-hub-tab="commodity">${icons.rupee(12)} Commodities</button>
           <button class="hub-tab" data-hub-tab="currency">${icons.globe(12)} Currencies</button>
           <button class="hub-tab" data-hub-tab="crypto">${icons.zap(12)} Crypto</button>
+   <button class="hub-tab" data-hub-tab="ai_insights">🤖 AI Insights</button>
         </div>
       </div>
 
@@ -425,6 +426,43 @@ export function renderActiveTabTable(): void {
     case 'crypto':
       html = renderCrypto(currentAssets.crypto);
       break;
+      case 'ai_insights': {
+        const body = container.querySelector('.hub-body');
+        if (body) {
+          body.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Loading AI Insights from Supabase...</div>';
+          import('../services/supabaseAiService').then(s => {
+            s.fetchAIInsights().then(insights => {
+              if (insights.length === 0) {
+                body.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No AI insights available yet. The AI worker runs daily.</div>';
+                return;
+              }
+              body.innerHTML = '<div class="ai-insights-container" style="display:flex; flex-direction:column; gap: 1rem; padding: 1rem;">' + 
+                insights.map(i => `
+                  <div style="background: var(--surface); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                      <h3 style="margin: 0; color: var(--primary-color);">${i.title}</h3>
+                      <span style="font-size: 0.8rem; color: var(--text-secondary);">${new Date(i.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <p style="margin: 0 0 1rem 0; font-size: 0.95rem;">${i.summary}</p>
+                    ${i.recommended_assets?.length > 0 ? `<h4 style="margin: 0 0 0.5rem 0;">Top Picks:</h4>` : ''}
+                    <ul style="margin: 0 0 1rem 0; padding-left: 1.2rem;">
+                      ${(i.recommended_assets || []).map(a => `
+                        <li style="margin-bottom: 0.5rem;">
+                          <strong>${a.name} (${a.symbol})</strong>: ${a.reasoning}
+                        </li>
+                      `).join('')}
+                    </ul>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); padding-top: 0.5rem; margin-top: 1rem;">
+                      <em>Disclaimer: ${i.disclaimer}</em>
+                    </div>
+                  </div>
+                `).join('') + '</div>';
+            });
+          });
+        }
+        break;
+      }
+
     }
   container.innerHTML = html;
   attachRowClickEvents();

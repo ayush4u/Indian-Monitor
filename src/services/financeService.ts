@@ -51,6 +51,9 @@ export interface MarketSummary {
 }
 
 export interface YahooQuote {
+  change7d?: number;
+  change30d?: number;
+  change1y?: number;
   price: number;
   change: number;
   changePercent: number;
@@ -71,6 +74,9 @@ export interface SearchResult {
 }
 
 export interface MarketAsset {
+  change7d?: number;
+  change30d?: number;
+  change1y?: number;
   symbol: string;
   name: string;
   price: number;
@@ -281,7 +287,19 @@ export async function fetchYahooQuote(symbol: string): Promise<YahooQuote | null
     const marketTime = meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000) : new Date();
     const lastUpdated = marketTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    return { price, change, changePercent, high, low, open, prevClose, volume, lastUpdated, prices };
+    // Calculate 7d and 30d
+    let change7d, change30d;
+    if (prices.length >= 7) {
+      const old = prices[prices.length - 7];
+      change7d = ((price - old) / old) * 100;
+    }
+    if (prices.length >= 2) {
+      const old = prices[0];
+      change30d = ((price - old) / old) * 100;
+    }
+    // Take last 7 days for the sparkline to match CoinGecko
+    const sparkline = prices.slice(-7);
+    return { price, change, changePercent, high, low, open, prevClose, volume, lastUpdated, prices: sparkline, change7d, change30d };
   } catch {
     return null;
   }
