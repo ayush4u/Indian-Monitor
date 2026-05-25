@@ -245,7 +245,7 @@ const CACHE_TTL = 15_000; // 15 seconds
 // ─── Core fetch for single symbol chart data (price + sparkline) ───
 export async function fetchYahooQuote(symbol: string): Promise<YahooQuote | null> {
   try {
-    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=15m&includePrePost=false`;
+    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d&includePrePost=false`;
     const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
     const res = await fetch(url);
     if (!res.ok) return null;

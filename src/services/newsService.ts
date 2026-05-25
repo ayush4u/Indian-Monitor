@@ -78,7 +78,7 @@ export async function fetchLiveNews(): Promise<NewsItem[]> {
 
   const allNews: NewsItem[] = [];
 
-  const fetches = RSS_FEEDS.map(async (feed) => {
+  const fetches = RSS_FEEDS.map((feed) => async () => {
     try {
       const targetUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(feed.query)}&hl=en-IN&gl=IN&ceid=IN:en`;
       const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
@@ -91,10 +91,11 @@ export async function fetchLiveNews(): Promise<NewsItem[]> {
     }
   });
 
-  const results = await Promise.allSettled(fetches);
-  results.forEach(r => {
-    if (r.status === 'fulfilled') allNews.push(...r.value);
-  });
+  for (const fetchFunc of fetches) {
+    const res = await fetchFunc();
+    allNews.push(...res);
+    await new Promise(r => setTimeout(r, 400)); // sleep 400ms between calls
+  }
 
   // Sort by time, deduplicate by title similarity
   allNews.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());

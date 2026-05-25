@@ -46,7 +46,7 @@ export async function fetchLiveFlights(): Promise<FlightRadarSummary> {
     // OpenSky Network supports CORS for unauthenticated requests — call directly
     const url = isLocal()
       ? `/api/opensky/states/all?lamin=${INDIA_BBOX.lamin}&lomin=${INDIA_BBOX.lomin}&lamax=${INDIA_BBOX.lamax}&lomax=${INDIA_BBOX.lomax}`
-      : `https://opensky-network.org/api/states/all?lamin=${INDIA_BBOX.lamin}&lomin=${INDIA_BBOX.lomin}&lamax=${INDIA_BBOX.lamax}&lomax=${INDIA_BBOX.lomax}`;
+      : `https://corsproxy.io/?url=` + encodeURIComponent(`https://opensky-network.org/api/states/all?lamin=${INDIA_BBOX.lamin}&lomin=${INDIA_BBOX.lomin}&lamax=${INDIA_BBOX.lamax}&lomax=${INDIA_BBOX.lomax}`);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`OpenSky ${res.status}`);
 
