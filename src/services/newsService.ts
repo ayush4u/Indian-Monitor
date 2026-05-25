@@ -71,18 +71,8 @@ function cleanTitle(title: string): string {
   return title.replace(/\s*-\s*[^-]+$/, '').trim() || title;
 }
 
-const isLocal = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-
 export async function fetchLiveNews(): Promise<NewsItem[]> {
   if (newsCache.length > 0 && Date.now() - lastNewsFetch < NEWS_CACHE_TTL) {
-    return newsCache;
-  }
-
-  // On static hosting, use offline news immediately
-  if (!isLocal()) {
-    newsCache = OFFLINE_NEWS();
-    breakingCache = newsCache.filter(n => n.severity === 'critical' || n.severity === 'high').slice(0, 8);
-    lastNewsFetch = Date.now();
     return newsCache;
   }
 
@@ -90,7 +80,8 @@ export async function fetchLiveNews(): Promise<NewsItem[]> {
 
   const fetches = RSS_FEEDS.map(async (feed) => {
     try {
-      const url = `/api/news/rss/search?q=${encodeURIComponent(feed.query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+      const targetUrl = `https://news.google.com/rss/search?q=${encodeURIComponent(feed.query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+      const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
       const res = await fetch(url);
       if (!res.ok) return [];
       const xml = await res.text();

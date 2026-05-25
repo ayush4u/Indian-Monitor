@@ -50,7 +50,65 @@ export interface MarketSummary {
   lastFetch: Date;
 }
 
-// Yahoo Finance symbols for Indian market
+export interface YahooQuote {
+  price: number;
+  change: number;
+  changePercent: number;
+  high: number;
+  low: number;
+  open: number;
+  prevClose: number;
+  volume: number;
+  lastUpdated: string;
+  prices: number[];
+}
+
+export interface SearchResult {
+  symbol: string;
+  name: string;
+  exchange: string;
+  quoteType: string;
+}
+
+export interface MarketAsset {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  high: number;
+  low: number;
+  volume: string;
+  marketCap: string;
+  sparkline: number[];
+  category: 'equity' | 'commodity' | 'currency' | 'crypto';
+  subCategory?: string; // sector for equity
+  priceUSD?: number;   // for commodities
+  priceINR?: number;   // calculated INR price
+  unit?: string;       // "per 10g", "per kg", etc.
+  currencySymbol: string;
+}
+
+export interface StockDetail {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  high: number;
+  low: number;
+  open: number;
+  prevClose: number;
+  volume: string;
+  marketCap: string;
+  currency: string;
+  fiftyTwoWeekHigh: number;
+  fiftyTwoWeekLow: number;
+  sparkline: number[];
+  chartData: { time: number; price: number }[];
+}
+
+// Yahoo Finance symbols for Indian market index
 const YAHOO_SYMBOLS: { symbol: string; name: string; exchange: string }[] = [
   { symbol: '^BSESN', name: 'SENSEX', exchange: 'BSE' },
   { symbol: '^NSEI', name: 'NIFTY 50', exchange: 'NSE' },
@@ -60,65 +118,6 @@ const YAHOO_SYMBOLS: { symbol: string; name: string; exchange: string }[] = [
   { symbol: '^CNXAUTO', name: 'NIFTY AUTO', exchange: 'NSE' },
   { symbol: '^INDIAVIX', name: 'INDIA VIX', exchange: 'NSE' },
 ];
-
-// Cache for market data
-let cachedData: MarketSummary | null = null;
-let lastFetchTime = 0;
-const CACHE_TTL = 15_000; // 15 seconds
-
-const isLocal = () => location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-
-async function fetchYahooQuote(symbol: string): Promise<{
-  price: number; change: number; changePercent: number;
-  high: number; low: number; open: number; prevClose: number;
-  volume: number; lastUpdated: string;
-} | null> {
-  if (!isLocal()) return null;
-  try {
-    const url = `/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=false`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    const result = data?.chart?.result?.[0];
-    if (!result) return null;
-
-    const meta = result.meta;
-    const price = meta.regularMarketPrice ?? 0;
-    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
-    const change = price - prevClose;
-    const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
-
-    const indicators = result.indicators?.quote?.[0];
-    let high = meta.regularMarketDayHigh ?? price;
-    let low = meta.regularMarketDayLow ?? price;
-    const open = meta.regularMarketOpen ?? prevClose;
-    let volume = meta.regularMarketVolume ?? 0;
-
-    if (indicators) {
-      const highs = (indicators.high || []).filter((v: number | null) => v != null);
-      const lows = (indicators.low || []).filter((v: number | null) => v != null);
-      if (highs.length) high = Math.max(...highs);
-      if (lows.length) low = Math.min(...lows);
-      const volumes = (indicators.volume || []).filter((v: number | null) => v != null);
-      if (volumes.length) volume = volumes.reduce((a: number, b: number) => a + b, 0);
-    }
-
-    const marketTime = meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000) : new Date();
-    const lastUpdated = marketTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-    return { price, change, changePercent, high, low, open, prevClose, volume, lastUpdated };
-  } catch {
-    return null;
-  }
-}
-
-function formatVolume(vol: number): string {
-  if (vol >= 1e7) return (vol / 1e7).toFixed(1) + 'Cr';
-  if (vol >= 1e5) return (vol / 1e5).toFixed(1) + 'L';
-  if (vol >= 1e3) return (vol / 1e3).toFixed(1) + 'K';
-  return vol.toString();
-}
 
 const SECTOR_META = [
   { symbol: '^CNXIT', name: 'IT', gainer: 'TCS', loser: 'Wipro' },
@@ -131,7 +130,7 @@ const SECTOR_META = [
   { symbol: '^CNXREALTY', name: 'Realty', gainer: 'DLF', loser: 'Godrej Prop' },
 ];
 
-// Top NIFTY 50 individual stocks (Yahoo Finance .NS suffix for NSE)
+// Top NIFTY 50 individual stocks
 const NIFTY_STOCKS: { symbol: string; name: string; sector: string }[] = [
   { symbol: 'RELIANCE.NS', name: 'Reliance Industries', sector: 'Energy' },
   { symbol: 'TCS.NS', name: 'TCS', sector: 'IT' },
@@ -165,13 +164,149 @@ const NIFTY_STOCKS: { symbol: string; name: string; sector: string }[] = [
   { symbol: 'TECHM.NS', name: 'Tech Mahindra', sector: 'IT' },
 ];
 
+// Offline lists for fallback search & lookup
+const POPULAR_OFFLINE_STOCKS = [
+  ...NIFTY_STOCKS,
+  { symbol: 'ZOMATO.NS', name: 'Zomato Ltd', sector: 'Consumer' },
+  { symbol: 'SUZLON.NS', name: 'Suzlon Energy', sector: 'Energy' },
+  { symbol: 'PAYTM.NS', name: 'One97 Communications', sector: 'Finance' },
+  { symbol: 'HAL.NS', name: 'Hindustan Aeronautics', sector: 'Industrial' },
+  { symbol: 'IRFC.NS', name: 'Indian Railway Finance', sector: 'Finance' },
+  { symbol: 'RVNL.NS', name: 'Rail Vikas Nigam Ltd', sector: 'Infra' },
+  { symbol: 'JIOFIN.NS', name: 'Jio Financial', sector: 'Finance' },
+  { symbol: 'IREDA.NS', name: 'Indian Renewable Energy', sector: 'Energy' },
+  { symbol: 'BHEL.NS', name: 'Bharat Heavy Electricals', sector: 'Industrial' },
+  { symbol: 'LIC.NS', name: 'Life Insurance Corp', sector: 'Finance' },
+  { symbol: 'YESBANK.NS', name: 'Yes Bank Ltd', sector: 'Banking' },
+  { symbol: 'TATAPOWER.NS', name: 'Tata Power Company', sector: 'Power' },
+  { symbol: 'ADANIPOWER.NS', name: 'Adani Power Ltd', sector: 'Power' },
+  { symbol: 'ADANIPORTS.NS', name: 'Adani Ports', sector: 'Infra' },
+  { symbol: 'IDEA.NS', name: 'Vodafone Idea Ltd', sector: 'Telecom' },
+  { symbol: 'TRENT.NS', name: 'Trent Ltd', sector: 'Consumer' },
+  { symbol: 'DMART.NS', name: 'Avenue Supermarts', sector: 'Consumer' },
+  { symbol: 'NYKAA.NS', name: 'FSN E-Commerce', sector: 'Consumer' },
+  { symbol: 'MRF.NS', name: 'MRF Ltd', sector: 'Auto' },
+  { symbol: 'VEDL.NS', name: 'Vedanta Ltd', sector: 'Metal' },
+  { symbol: 'AMBUJACEM.NS', name: 'Ambuja Cements', sector: 'Cement' },
+  { symbol: 'INDIGO.NS', name: 'InterGlobe Aviation', sector: 'Transport' },
+  { symbol: 'ZENTEC.NS', name: 'Zen Technologies', sector: 'Defence' },
+  { symbol: 'BEL.NS', name: 'Bharat Electronics', sector: 'Defence' },
+  { symbol: 'PNB.NS', name: 'Punjab National Bank', sector: 'Banking' },
+  { symbol: 'BOB.NS', name: 'Bank of Baroda', sector: 'Banking' },
+  { symbol: 'DLF.NS', name: 'DLF Ltd', sector: 'Realty' },
+  { symbol: 'GODREJPROP.NS', name: 'Godrej Properties', sector: 'Realty' },
+  { symbol: 'DIVISLAB.NS', name: 'Divis Laboratories', sector: 'Pharma' },
+  { symbol: 'CIPLA.NS', name: 'Cipla Ltd', sector: 'Pharma' },
+  { symbol: 'BAJAJ-AUTO.NS', name: 'Bajaj Auto', sector: 'Auto' },
+  { symbol: 'HEROMOTOCO.NS', name: 'Hero MotoCorp', sector: 'Auto' },
+  { symbol: 'HINDALCO.NS', name: 'Hindalco Industries', sector: 'Metal' },
+];
+
+const COMMODITY_SECTOR = [
+  { symbol: 'GC=F', name: 'Gold (Global)', unit: 'per 10g', type: 'gold' },
+  { symbol: 'SI=F', name: 'Silver (Global)', unit: 'per kg', type: 'silver' },
+  { symbol: 'HG=F', name: 'Copper Futures', unit: 'per kg', type: 'copper' },
+  { symbol: 'PL=F', name: 'Platinum Futures', unit: 'per 10g', type: 'platinum' },
+  { symbol: 'CL=F', name: 'Crude Oil WTI', unit: 'per bbl', type: 'oil' },
+  { symbol: 'BZ=F', name: 'Brent Crude Oil', unit: 'per bbl', type: 'oil' },
+  { symbol: 'NG=F', name: 'Natural Gas', unit: 'per MMBtu', type: 'gas' },
+];
+
+const CURRENCY_SECTOR = [
+  { symbol: 'USDINR=X', name: 'USD / INR (India-US)' },
+  { symbol: 'CNYINR=X', name: 'CNY / INR (India-China)' },
+  { symbol: 'EURINR=X', name: 'EUR / INR' },
+  { symbol: 'GBPINR=X', name: 'GBP / INR' },
+  { symbol: 'JPYINR=X', name: 'JPY / INR' },
+  { symbol: 'SGDINR=X', name: 'SGD / INR' },
+  { symbol: 'AEDINR=X', name: 'AED / INR' },
+];
+
+const CRYPTO_SECTOR = [
+  { symbol: 'BTC-INR', name: 'Bitcoin (BTC)' },
+  { symbol: 'ETH-INR', name: 'Ethereum (ETH)' },
+  { symbol: 'BNB-INR', name: 'Binance Coin (BNB)' },
+  { symbol: 'SOL-INR', name: 'Solana (SOL)' },
+];
+
+// Cache for market summary
+let cachedSummary: MarketSummary | null = null;
+let lastSummaryFetch = 0;
+const CACHE_TTL = 15_000; // 15 seconds
+
+// Watchlist removed
+
+// ─── Core fetch for single symbol chart data (price + sparkline) ───
+export async function fetchYahooQuote(symbol: string): Promise<YahooQuote | null> {
+  try {
+    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=15m&includePrePost=false`;
+    const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
+
+    const meta = result.meta;
+    const price = meta.regularMarketPrice ?? 0;
+    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
+    const change = price - prevClose;
+    const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+
+    const indicators = result.indicators?.quote?.[0];
+    let high = meta.regularMarketDayHigh ?? price;
+    let low = meta.regularMarketDayLow ?? price;
+    const open = meta.regularMarketOpen ?? prevClose;
+    let volume = meta.regularMarketVolume ?? 0;
+
+    let prices: number[] = [];
+    if (indicators) {
+      const highs = (indicators.high || []).filter((v: number | null) => v != null);
+      const lows = (indicators.low || []).filter((v: number | null) => v != null);
+      if (highs.length) high = Math.max(...highs);
+      if (lows.length) low = Math.min(...lows);
+      const volumes = (indicators.volume || []).filter((v: number | null) => v != null);
+      if (volumes.length) volume = volumes.reduce((a: number, b: number) => a + b, 0);
+
+      if (indicators.close) {
+        prices = indicators.close.filter((c: number | null) => c !== null) as number[];
+      }
+    }
+
+    if (prices.length === 0) {
+      prices = [prevClose, price];
+    }
+
+    const marketTime = meta.regularMarketTime ? new Date(meta.regularMarketTime * 1000) : new Date();
+    const lastUpdated = marketTime.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    return { price, change, changePercent, high, low, open, prevClose, volume, lastUpdated, prices };
+  } catch {
+    return null;
+  }
+}
+
+function formatVolume(vol: number): string {
+  if (vol >= 1e7) return (vol / 1e7).toFixed(1) + 'Cr';
+  if (vol >= 1e5) return (vol / 1e5).toFixed(1) + 'L';
+  if (vol >= 1e3) return (vol / 1e3).toFixed(1) + 'K';
+  return vol.toString();
+}
+
+function formatMarketCap(cap: number): string {
+  if (!cap) return '—';
+  if (cap >= 1e12) return '₹' + (cap / 1e12).toFixed(2) + 'T';
+  if (cap >= 1e7) return '₹' + (cap / 1e7).toFixed(0) + 'Cr';
+  return '₹' + (cap / 1e5).toFixed(0) + 'L';
+}
+
+// ─── Fetch market data for original dashboard components ───
 export async function fetchLiveMarketData(): Promise<MarketSummary> {
-  // Return cache if fresh
-  if (cachedData && Date.now() - lastFetchTime < CACHE_TTL) {
-    return cachedData;
+  if (cachedSummary && Date.now() - lastSummaryFetch < CACHE_TTL) {
+    return cachedSummary;
   }
 
-  // Fetch main indices
   const results = await Promise.allSettled(
     YAHOO_SYMBOLS.map(s => fetchYahooQuote(s.symbol))
   );
@@ -200,12 +335,10 @@ export async function fetchLiveMarketData(): Promise<MarketSummary> {
     }
   });
 
-  // If no live data at all, return fallback
   if (indices.length === 0) {
     return getFallbackData();
   }
 
-  // Fetch sector data in parallel
   const sectorResults = await Promise.allSettled(
     SECTOR_META.map(s => fetchYahooQuote(s.symbol))
   );
@@ -219,37 +352,32 @@ export async function fetchLiveMarketData(): Promise<MarketSummary> {
     return { name: s.name, change: +change.toFixed(2), topGainer: s.gainer, topLoser: s.loser, momentum };
   });
 
-  // Fetch individual NIFTY 50 stocks (batch in groups of 10)
   const stocks: StockTicker[] = [];
-  for (let i = 0; i < NIFTY_STOCKS.length; i += 10) {
-    const batch = NIFTY_STOCKS.slice(i, i + 10);
-    const batchResults = await Promise.allSettled(
-      batch.map(s => fetchYahooQuote(s.symbol))
-    );
-    batchResults.forEach((result, j) => {
-      const meta = batch[j];
-      if (result.status === 'fulfilled' && result.value) {
-        const q = result.value;
-        stocks.push({
-          symbol: meta.symbol.replace('.NS', ''),
-          name: meta.name,
-          price: q.price,
-          change: q.change,
-          changePercent: q.changePercent,
-          volume: formatVolume(q.volume),
-          sector: meta.sector,
-          marketCap: '',
-        });
-      }
-    });
-  }
+  const batch = NIFTY_STOCKS.slice(0, 15); // slice for faster summary loads
+  const batchResults = await Promise.allSettled(
+    batch.map(s => fetchYahooQuote(s.symbol))
+  );
+  batchResults.forEach((result, j) => {
+    const meta = batch[j];
+    if (result.status === 'fulfilled' && result.value) {
+      const q = result.value;
+      stocks.push({
+        symbol: meta.symbol.replace('.NS', ''),
+        name: meta.name,
+        price: q.price,
+        change: q.change,
+        changePercent: q.changePercent,
+        volume: formatVolume(q.volume),
+        sector: meta.sector,
+        marketCap: '',
+      });
+    }
+  });
 
-  // Compute gainers and losers
   const sorted = [...stocks].sort((a, b) => b.changePercent - a.changePercent);
   const gainers = sorted.filter(s => s.changePercent > 0).slice(0, 10);
   const losers = sorted.filter(s => s.changePercent < 0).sort((a, b) => a.changePercent - b.changePercent).slice(0, 10);
 
-  // Compute advance/decline
   const advances = stocks.filter(s => s.change > 0).length;
   const declines = stocks.filter(s => s.change < 0).length;
   const unchanged = stocks.filter(s => s.change === 0).length;
@@ -270,11 +398,457 @@ export async function fetchLiveMarketData(): Promise<MarketSummary> {
     lastFetch: new Date(),
   };
 
-  cachedData = summary;
-  lastFetchTime = Date.now();
+  cachedSummary = summary;
+  lastSummaryFetch = Date.now();
   return summary;
 }
 
+export function getMarketData(): MarketSummary {
+  if (cachedSummary) return cachedSummary;
+  return getFallbackData();
+}
+
+// ─── Dynamic symbol search (Yahoo API) ───
+export async function searchYahooSymbols(query: string): Promise<SearchResult[]> {
+  if (!query || query.trim().length < 2) return [];
+  try {
+    const targetUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&newsCount=0`;
+    const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Search failed');
+
+    const data = await res.json();
+    const quotes = data?.quotes || [];
+    return quotes
+      .filter((q: any) => q.quoteType === 'EQUITY' || q.quoteType === 'CURRENCY' || q.quoteType === 'FUTURE' || q.quoteType === 'INDEX' || q.quoteType === 'CRYPTOCURRENCY')
+      .map((q: any) => ({
+        symbol: q.symbol,
+        name: q.longname || q.shortname || q.symbol,
+        exchange: q.exchange || q.exchDisp || '',
+        quoteType: q.quoteType || q.typeDisp || '',
+      }));
+  } catch (e) {
+    console.error('Yahoo search failed, using fallback:', e);
+    const q = query.toLowerCase();
+    const all = [...POPULAR_OFFLINE_STOCKS, ...COMMODITY_SECTOR, ...CURRENCY_SECTOR, ...CRYPTO_SECTOR];
+    return all
+      .filter(s => s.symbol.toLowerCase().includes(q) || s.name.toLowerCase().includes(q))
+      .map(s => ({
+        symbol: s.symbol,
+        name: s.name,
+        exchange: s.symbol.endsWith('.NS') ? 'NSE' : s.symbol.includes('=X') ? 'FX' : 'BSE',
+        quoteType: s.symbol.includes('=X') ? 'CURRENCY' : s.symbol.endsWith('=F') ? 'FUTURE' : s.symbol.includes('-INR') ? 'CRYPTOCURRENCY' : 'EQUITY',
+      }));
+  }
+}
+
+// ─── Fetch Detailed Asset info for charts and modals ───
+export async function fetchStockDetail(symbol: string, range = '1mo'): Promise<StockDetail | null> {
+  let interval = '1d';
+  if (range === '1d') interval = '5m';
+  else if (range === '5d') interval = '15m';
+  else if (range === '1mo') interval = '1d';
+  else if (range === '6mo') interval = '1d';
+  else if (range === '1y') interval = '1wk';
+
+  try {
+    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false`;
+    const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Detail fetch failed');
+
+    const data = await res.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) return null;
+
+    const meta = result.meta;
+    const price = meta.regularMarketPrice ?? 0;
+    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
+    const change = price - prevClose;
+    const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+    const high = meta.regularMarketDayHigh ?? price;
+    const low = meta.regularMarketDayLow ?? price;
+    const open = meta.regularMarketOpen ?? prevClose;
+    const volumeVal = meta.regularMarketVolume ?? 0;
+
+    const timestamps = result.timestamp || [];
+    const indicators = result.indicators?.quote?.[0];
+    const closes = indicators?.close || [];
+
+    const sparkline: number[] = closes.filter((c: any) => c != null);
+    const chartData = timestamps.map((time: number, idx: number) => ({
+      time: time * 1000,
+      price: closes[idx] !== null && closes[idx] !== undefined ? closes[idx] : price,
+    })).filter((item: any) => item.price !== null && !isNaN(item.price));
+
+    return {
+      symbol,
+      name: meta.shortName || meta.symbol || symbol,
+      price,
+      change,
+      changePercent,
+      high,
+      low,
+      open,
+      prevClose,
+      volume: formatVolume(volumeVal),
+      marketCap: formatMarketCap(meta.marketCap || 0),
+      currency: meta.currency || 'INR',
+      fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || high,
+      fiftyTwoWeekLow: meta.fiftyTwoWeekLow || low,
+      sparkline,
+      chartData,
+    };
+  } catch (e) {
+    console.error('Fetch detail failed, returning fallback:', e);
+    return getFallbackStockDetail(symbol, range);
+  }
+}
+
+// ─── Fetch Markets Hub Categories Data ───
+export async function fetchMarketsHubAssets(): Promise<{
+  equities: MarketAsset[];
+  commodities: MarketAsset[];
+  currencies: MarketAsset[];
+  crypto: MarketAsset[];
+}> {
+  // 1. Fetch USDINR first for commodity conversions
+  let usdInrRate = 83.5;
+  try {
+    const usdQuote = await fetchYahooQuote('USDINR=X');
+    if (usdQuote) usdInrRate = usdQuote.price;
+  } catch {
+    // Keep 83.5
+  }
+
+  // 2. Fetch everything in parallel
+  const equitiesP = Promise.allSettled(POPULAR_OFFLINE_STOCKS.map(async s => {
+    const q = await fetchYahooQuote(s.symbol);
+    return { item: s, quote: q };
+  }));
+
+  const commoditiesP = Promise.allSettled(COMMODITY_SECTOR.map(async s => {
+    const q = await fetchYahooQuote(s.symbol);
+    return { item: s, quote: q };
+  }));
+
+  const currenciesP = Promise.allSettled(CURRENCY_SECTOR.map(async s => {
+    const q = await fetchYahooQuote(s.symbol);
+    return { item: s, quote: q };
+  }));
+
+  const cryptoP = Promise.allSettled(CRYPTO_SECTOR.map(async s => {
+    const q = await fetchYahooQuote(s.symbol);
+    return { item: s, quote: q };
+  }));
+
+  const [eqRes, comRes, curRes, cryRes] = await Promise.all([
+    equitiesP, commoditiesP, currenciesP, cryptoP
+  ]);
+
+  const equities: MarketAsset[] = [];
+  const commodities: MarketAsset[] = [];
+  const currencies: MarketAsset[] = [];
+  const crypto: MarketAsset[] = [];
+
+  // Map Equities
+  eqRes.forEach((r) => {
+    if (r.status === 'fulfilled' && r.value.quote) {
+      const q = r.value.quote;
+      const s = r.value.item;
+      equities.push({
+        symbol: s.symbol,
+        name: s.name,
+        price: q.price,
+        change: q.change,
+        changePercent: q.changePercent,
+        high: q.high,
+        low: q.low,
+        volume: formatVolume(q.volume),
+        marketCap: formatMarketCap(q.price * 5_000_000_000), // Approximate Cap if not retrieved
+        sparkline: q.prices,
+        category: 'equity',
+        subCategory: s.sector,
+        currencySymbol: '₹',
+      });
+    } else if (r.status === 'fulfilled') {
+      // Fallback inside equities
+      const s = r.value.item;
+      const fb = getAssetFallback(s.symbol, s.name, 'equity', s.sector, usdInrRate);
+      equities.push(fb);
+    }
+  });
+
+  // Map Commodities
+  comRes.forEach((r) => {
+    if (r.status === 'fulfilled' && r.value.quote) {
+      const q = r.value.quote;
+      const s = r.value.item;
+      const parsed = parseCommodity(s.symbol, s.name, q.price, q.change, q.changePercent, q.prices, s.unit, s.type, usdInrRate);
+      commodities.push(parsed);
+    } else if (r.status === 'fulfilled') {
+      const s = r.value.item;
+      const fb = getAssetFallback(s.symbol, s.name, 'commodity', s.unit, usdInrRate);
+      commodities.push(fb);
+    }
+  });
+
+  // Map Currencies
+  curRes.forEach((r) => {
+    if (r.status === 'fulfilled' && r.value.quote) {
+      const q = r.value.quote;
+      const s = r.value.item;
+      currencies.push({
+        symbol: s.symbol,
+        name: s.name,
+        price: q.price,
+        change: q.change,
+        changePercent: q.changePercent,
+        high: q.high,
+        low: q.low,
+        volume: '—',
+        marketCap: '—',
+        sparkline: q.prices,
+        category: 'currency',
+        currencySymbol: '₹',
+      });
+    } else if (r.status === 'fulfilled') {
+      const s = r.value.item;
+      const fb = getAssetFallback(s.symbol, s.name, 'currency', '', usdInrRate);
+      currencies.push(fb);
+    }
+  });
+
+  // Map Crypto
+  cryRes.forEach((r) => {
+    if (r.status === 'fulfilled' && r.value.quote) {
+      const q = r.value.quote;
+      const s = r.value.item;
+      crypto.push({
+        symbol: s.symbol,
+        name: s.name,
+        price: q.price,
+        change: q.change,
+        changePercent: q.changePercent,
+        high: q.high,
+        low: q.low,
+        volume: formatVolume(q.volume),
+        marketCap: formatMarketCap(q.price * 1_000_000),
+        sparkline: q.prices,
+        category: 'crypto',
+        currencySymbol: '₹',
+      });
+    } else if (r.status === 'fulfilled') {
+      const s = r.value.item;
+      const fb = getAssetFallback(s.symbol, s.name, 'crypto', '', usdInrRate);
+      crypto.push(fb);
+    }
+  });
+
+  return { equities, commodities, currencies, crypto };
+}
+
+function parseCommodity(
+  symbol: string, name: string, priceUSD: number, changeUSD: number, pctUSD: number, 
+  pricesUSD: number[], unit: string, type: string, usdInrRate: number
+): MarketAsset {
+  let price = priceUSD;
+  let change = changeUSD;
+  let pct = pctUSD;
+  let priceINR = 0;
+  
+  if (type === 'gold') {
+    // 1oz troy = 31.1034768 grams. Price is per 10g in India
+    priceINR = (priceUSD / 31.1034768) * usdInrRate * 10;
+    price = priceINR;
+    change = (changeUSD / 31.1034768) * usdInrRate * 10;
+  } else if (type === 'silver') {
+    // 1oz troy = 31.1034768 grams. Price is per kg in India (1000g)
+    priceINR = (priceUSD / 31.1034768) * usdInrRate * 1000;
+    price = priceINR;
+    change = (changeUSD / 31.1034768) * usdInrRate * 1000;
+  } else if (type === 'copper') {
+    // Price is per pound (lb) in US. In India it is per kg. 1 lb = 0.453592 kg
+    priceINR = (priceUSD / 0.453592) * usdInrRate;
+    price = priceINR;
+    change = (changeUSD / 0.453592) * usdInrRate;
+  } else if (type === 'platinum') {
+    priceINR = (priceUSD / 31.1034768) * usdInrRate * 10;
+    price = priceINR;
+    change = (changeUSD / 31.1034768) * usdInrRate * 10;
+  } else if (type === 'oil') {
+    // Price per barrel in USD
+    priceINR = priceUSD * usdInrRate;
+    price = priceINR;
+    change = changeUSD * usdInrRate;
+  }
+
+  // Calculate sparkline in INR if we have pricesUSD
+  const sparkline = pricesUSD.map(p => {
+    if (type === 'gold') return (p / 31.1034768) * usdInrRate * 10;
+    if (type === 'silver') return (p / 31.1034768) * usdInrRate * 1000;
+    if (type === 'copper') return (p / 0.453592) * usdInrRate;
+    if (type === 'platinum') return (p / 31.1034768) * usdInrRate * 10;
+    if (type === 'oil') return p * usdInrRate;
+    return p;
+  });
+
+  return {
+    symbol,
+    name,
+    price,
+    change,
+    changePercent: pct,
+    high: sparkline.length ? Math.max(...sparkline) : price,
+    low: sparkline.length ? Math.min(...sparkline) : price,
+    volume: '—',
+    marketCap: '—',
+    sparkline,
+    category: 'commodity',
+    priceUSD,
+    priceINR: priceINR || undefined,
+    unit,
+    currencySymbol: '₹',
+  };
+}
+
+// ─── High fidelity Fallback generator for Markets Hub Assets ───
+function getAssetFallback(symbol: string, name: string, category: MarketAsset['category'], detail: string, usdInrRate: number): MarketAsset {
+  const seed = symbol.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const rand = (n: number) => Math.sin(seed * n) * 0.5 + 0.5;
+
+  let price = 100;
+  let changePercent = (rand(123) * 4) - 2; // -2% to +2%
+  let currencySymbol = '₹';
+  let unit = '';
+  let subCategory = detail;
+  
+  if (category === 'equity') {
+    price = 50 + rand(456) * 4000;
+  } else if (category === 'currency') {
+    if (symbol.startsWith('USD')) price = usdInrRate;
+    else if (symbol.startsWith('CNY')) price = usdInrRate / 7.25;
+    else if (symbol.startsWith('EUR')) price = usdInrRate * 1.08;
+    else if (symbol.startsWith('GBP')) price = usdInrRate * 1.27;
+    else if (symbol.startsWith('JPY')) price = usdInrRate / 155;
+    else price = usdInrRate / 1.34;
+  } else if (category === 'commodity') {
+    unit = detail;
+    if (symbol.startsWith('GC')) {
+      const usdPrice = 2300 + rand(789) * 200;
+      price = (usdPrice / 31.1035) * usdInrRate * 10; // INR per 10g
+    } else if (symbol.startsWith('SI')) {
+      const usdPrice = 28 + rand(111) * 5;
+      price = (usdPrice / 31.1035) * usdInrRate * 1000; // INR per kg
+    } else if (symbol.startsWith('HG')) {
+      const usdPrice = 4.5 + rand(222) * 0.5;
+      price = (usdPrice / 0.45359) * usdInrRate; // INR per kg
+    } else if (symbol.startsWith('PL')) {
+      const usdPrice = 950 + rand(333) * 100;
+      price = (usdPrice / 31.1035) * usdInrRate * 10; // INR per 10g
+    } else if (symbol.startsWith('CL') || symbol.startsWith('BZ')) {
+      const usdPrice = 75 + rand(444) * 15;
+      price = usdPrice * usdInrRate; // INR per bbl
+    } else {
+      price = 2 + rand(555) * 2; // Gas in USD
+      currencySymbol = '$';
+    }
+  } else if (category === 'crypto') {
+    if (symbol.startsWith('BTC')) price = 60000 * usdInrRate;
+    else if (symbol.startsWith('ETH')) price = 3000 * usdInrRate;
+    else if (symbol.startsWith('BNB')) price = 580 * usdInrRate;
+    else price = 150 * usdInrRate;
+  }
+
+  const change = price * (changePercent / 100);
+  const sparkline: number[] = [];
+  const base = price - change;
+  for (let i = 0; i < 20; i++) {
+    const t = i / 19;
+    const fluc = (rand(i + 20) - 0.5) * (price * 0.015);
+    sparkline.push(base + t * change + fluc);
+  }
+  sparkline.push(price);
+
+  return {
+    symbol: symbol.replace('.NS', ''),
+    name,
+    price,
+    change,
+    changePercent,
+    high: Math.max(...sparkline),
+    low: Math.min(...sparkline),
+    volume: category === 'currency' ? '—' : formatVolume(100000 + Math.floor(rand(999) * 10000000)),
+    marketCap: category === 'currency' || category === 'commodity' ? '—' : formatMarketCap(price * 10000000),
+    sparkline,
+    category,
+    subCategory: subCategory || undefined,
+    unit: unit || undefined,
+    currencySymbol,
+  };
+}
+
+// ─── Fallback stock detail for detail popups ───
+function getFallbackStockDetail(symbol: string, range: string): StockDetail {
+  const seed = symbol.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const rand = (n: number) => Math.sin(seed * n) * 0.5 + 0.5;
+
+  const basePrice = 100 + rand(500) * 1500;
+  const changePercent = (rand(200) * 6) - 3; // -3% to +3%
+  const change = basePrice * (changePercent / 100);
+  const price = basePrice;
+  const high = price * (1 + rand(400) * 0.01);
+  const low = price * (1 - rand(401) * 0.01);
+  const open = price - change * 0.8;
+  const prevClose = price - change;
+
+  // Chart timestamps & prices based on selected range
+  let pointsCount = 24;
+  let timeStep = 3600 * 1000; // 1 hour
+  if (range === '1d') { pointsCount = 24; timeStep = 15 * 60 * 1000; }
+  else if (range === '5d') { pointsCount = 30; timeStep = 4 * 3600 * 1000; }
+  else if (range === '1mo') { pointsCount = 30; timeStep = 24 * 3600 * 1000; }
+  else if (range === '6mo') { pointsCount = 26; timeStep = 7 * 24 * 3600 * 1000; }
+  else { pointsCount = 52; timeStep = 7 * 24 * 3600 * 1000; }
+
+  const startTime = Date.now() - pointsCount * timeStep;
+  const chartData: { time: number; price: number }[] = [];
+  const sparkline: number[] = [];
+
+  for (let i = 0; i < pointsCount; i++) {
+    const ratio = i / (pointsCount - 1);
+    const trend = prevClose + ratio * change;
+    const noise = (rand(i + 15) - 0.5) * (basePrice * 0.03);
+    const p = Math.max(1, trend + noise);
+    chartData.push({ time: startTime + i * timeStep, price: p });
+    sparkline.push(p);
+  }
+
+  // Ensure last point matches current price
+  chartData[chartData.length - 1].price = price;
+  sparkline[sparkline.length - 1] = price;
+
+  return {
+    symbol: symbol.replace('.NS', '').replace('.BO', ''),
+    name: POPULAR_OFFLINE_STOCKS.find(s => s.symbol === symbol)?.name || symbol,
+    price,
+    change,
+    changePercent,
+    high,
+    low,
+    open,
+    prevClose,
+    volume: formatVolume(500000 + Math.floor(rand(12) * 5000000)),
+    marketCap: formatMarketCap(price * 10_000_000),
+    currency: symbol.includes('=X') || symbol.endsWith('.NS') ? 'INR' : 'USD',
+    fiftyTwoWeekHigh: high * 1.2,
+    fiftyTwoWeekLow: low * 0.8,
+    sparkline,
+    chartData,
+  };
+}
+
+// ─── Fallback Summary data for original dashboard ───
 function getFallbackData(): MarketSummary {
   const seed = new Date().getDate();
   const r = (base: number, range: number) => +(base + Math.sin(seed * 9301 + base) * range).toFixed(2);
@@ -332,8 +906,3 @@ function getFallbackData(): MarketSummary {
   };
 }
 
-// Synchronous getter for initial render (uses cache or fallback)
-export function getMarketData(): MarketSummary {
-  if (cachedData) return cachedData;
-  return getFallbackData();
-}

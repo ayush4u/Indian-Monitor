@@ -11,6 +11,7 @@ import { createWeatherPanel, createDisasterPanel } from './components/WeatherPan
 import { createTransportPanel, initTransportTabs, initTrainFilters, invalidateTrainCache } from './components/TransportPanel';
 import { createFlightRadarPanel, initFlightRadarTabs, initFlightFilters } from './components/FlightRadarPanel';
 import { createStockHeatmapPanel, initStockHeatmapTabs } from './components/StockHeatmapPanel';
+import { createMarketsHub, initMarketsHubEvents, updateMarketsHubUI } from './components/MarketsHub';
 
 import { createStateDetailOverlay, showStateDetail, initStateDetailClose } from './components/StateDetail';
 import { createStatsBar } from './components/StatsBar';
@@ -69,6 +70,9 @@ function render(): void {
     initFlightClickRoutes();
     initStatCardNav();
     initDetailOverlayClose();
+    if (currentView === 'finance') {
+      initMarketsHubEvents();
+    }
   });
 }
 
@@ -89,7 +93,7 @@ function renderView(view: View): string {
     case 'news':
       return `${createPageHeader(icons.news(18), 'News Intelligence')}${createNewsPanel()}`;
     case 'finance':
-      return `${createPageHeader(icons.finance(18), 'Markets & Stocks')}${createFinancePanel()}${createStockHeatmapPanel()}`;
+      return `${createPageHeader(icons.finance(18), 'Markets Hub')}${createMarketsHub()}`;
     case 'weather':
       return `${createPageHeader(icons.weather(18), 'Weather & Disasters')}${createWeatherPanel()}${createDisasterPanel()}`;
     case 'transport':
@@ -472,7 +476,10 @@ function refreshPanels(): void {
     }
   }
 
-
+  // Refresh Markets Hub
+  if (currentView === 'finance') {
+    updateMarketsHubUI(true);
+  }
 }
 
 // ─── Auto-refresh every 60s ───
