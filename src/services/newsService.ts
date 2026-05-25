@@ -108,8 +108,8 @@ export async function fetchLiveNews(): Promise<NewsItem[]> {
     return true;
   });
 
-  newsCache = deduped;
-  breakingCache = deduped.filter(n => n.severity === 'critical' || n.severity === 'high').slice(0, 8);
+  newsCache = deduped.length > 0 ? deduped : OFFLINE_NEWS();
+  breakingCache = newsCache.filter(n => n.severity === 'critical' || n.severity === 'high').slice(0, 8);
   lastNewsFetch = Date.now();
 
   return newsCache;
