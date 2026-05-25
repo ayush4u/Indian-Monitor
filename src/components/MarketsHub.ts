@@ -20,6 +20,25 @@ let currentAssets: {
 } | null = null;
 
 let activeTab: 'equity' | 'commodity' | 'currency' | 'crypto' | 'ai_insights' = 'equity';
+let sortCol = 'change';
+let sortDir = -1;
+
+function sortAssets(assets: MarketAsset[]) {
+  return [...assets].sort((a, b) => {
+    let valA = a[sortCol] || 0;
+    let valB = b[sortCol] || 0;
+    
+    // Special handling for change metrics if they don't exist
+    if (sortCol === 'changePercent') valA = a.changePercent || 0;
+    if (sortCol === 'change7d') valA = a.change7d || 0;
+    if (sortCol === 'change30d') valA = a.change30d || 0;
+    
+    // String compare for symbols
+    if (sortCol === 'symbol') return sortDir * a.symbol.localeCompare(b.symbol);
+    
+    return sortDir * (valA > valB ? 1 : -1);
+  });
+}
 let activeEquitySector = 'All';
 
 // Star icon SVG helper
@@ -164,6 +183,7 @@ function generateSparkline(prices: number[], width = 90, height = 30): string {
       </defs>
       <path d="M 0,${height} L ${points.join(' L ')} L ${width},${height} Z" fill="url(#${gradId})" />
       <path d="M ${points.join(' L ')}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+      ${points.map((pt, i) => `<circle cx="${pt.split(',')[0]}" cy="${pt.split(',')[1]}" r="6" fill="transparent" class="spark-pt"><title>Price: ₹${prices[i].toFixed(2)}</title></circle>`).join('')}
     </svg>
   `;
 }
@@ -229,22 +249,28 @@ function renderEquities(assets: MarketAsset[]): string {
     return `<div class="hub-no-assets">No equities found in ${activeEquitySector} sector</div>`;
   }
 
+  const sorted = sortAssets(filtered);
+  const getSortIcon = (col: string) => sortCol === col ? (sortDir === 1 ? ' ↑' : ' ↓') : '';
+
   return `
     <table class="hub-table">
       <thead>
         <tr>
-          <th>Asset</th>
-          <th style="text-align: right;">Price</th>
-          <th style="text-align: right;">24h Change</th>
-          <th style="text-align: right;">Volume</th>
-          <th style="text-align: right;">Market Cap</th>
-          <th style="text-align: center; width: 120px;">Trend (24h)</th>
+          <th data-sort="symbol" style="cursor:pointer">Asset${getSortIcon('symbol')}</th>
+          <th data-sort="price" style="text-align: right; cursor:pointer">Price${getSortIcon('price')}</th>
+          <th data-sort="changePercent" style="text-align: right; cursor:pointer">24h %${getSortIcon('changePercent')}</th>
+          <th data-sort="change7d" class="hide-mobile" style="text-align: right; cursor:pointer">7d %${getSortIcon('change7d')}</th>
+          <th data-sort="change30d" class="hide-mobile" style="text-align: right; cursor:pointer">30d %${getSortIcon('change30d')}</th>
+          <th data-sort="marketCap" class="hide-mobile" style="text-align: right; cursor:pointer">Market Cap${getSortIcon('marketCap')}</th>
+          <th style="text-align: center; width: 120px;">Trend (7d)</th>
         </tr>
       </thead>
       <tbody>
-        ${filtered.map(a => {
+        ${sorted.map(a => {
           const direction = a.change >= 0 ? 'up' : 'down';
           const sign = a.change >= 0 ? '+' : '';
+          const c7d = a.change7d !== undefined ? a.change7d : 0;
+          const c30d = a.change30d !== undefined ? a.change30d : 0;
           return `
             <tr class="hub-row" data-symbol="${a.symbol}">
               <td>
@@ -255,13 +281,18 @@ function renderEquities(assets: MarketAsset[]): string {
               </td>
               <td class="hub-price-cell ${direction}">₹${a.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               <td class="hub-change-cell ${direction}">
-                <div style="font-weight:700;">${formatPercent(a.changePercent)}</div>
+                <div style="font-weight:700;">${sign}${a.changePercent.toFixed(1)}%</div>
                 <div style="font-size: 10px; opacity: 0.7;">${sign}₹${a.change.toFixed(2)}</div>
               </td>
-              <td class="hub-vol-cell">${a.volume}</td>
-              <td class="hub-mcap-cell">${a.marketCap}</td>
+              <td class="hub-change-cell hide-mobile ${c7d >= 0 ? 'up' : 'down'}">
+                <div style="font-weight:700;">${c7d >= 0 ? '+' : ''}${c7d.toFixed(1)}%</div>
+              </td>
+              <td class="hub-change-cell hide-mobile ${c30d >= 0 ? 'up' : 'down'}">
+                <div style="font-weight:700;">${c30d >= 0 ? '+' : ''}${c30d.toFixed(1)}%</div>
+              </td>
+              <td class="hub-mcap-cell hide-mobile">${a.marketCap}</td>
               <td class="hub-sparkline-cell" style="text-align:center;">
-                ${generateSparkline(a.sparkline)}
+                ${generateSparkline(a.sparkline || [])}
               </td>
             </tr>
           `;
@@ -430,12 +461,22 @@ export function renderActiveTabTable(): void {
         const body = container.querySelector('.hub-body');
         if (body) {
           body.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Loading AI Insights from Supabase...</div>';
+
           import('../services/supabaseAiService').then(s => {
+            if (s.isSupabaseConfigured && !s.isSupabaseConfigured()) {
+              console.warn('[AI] Supabase not configured for client. VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY missing.');
+              body.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--text-secondary);">
+                Supabase not configured for AI insights. Please set <strong>VITE_SUPABASE_URL</strong> and <strong>VITE_SUPABASE_ANON_KEY</strong> in your Vite env and rebuild/restart the app.
+                </div>`;
+              return;
+            }
+
             s.fetchAIInsights().then(insights => {
-              if (insights.length === 0) {
+              if (!insights || insights.length === 0) {
                 body.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No AI insights available yet. The AI worker runs daily.</div>';
                 return;
               }
+
               body.innerHTML = '<div class="ai-insights-container" style="display:flex; flex-direction:column; gap: 1rem; padding: 1rem;">' + 
                 insights.map(i => `
                   <div style="background: var(--surface); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 8px;">
@@ -457,7 +498,13 @@ export function renderActiveTabTable(): void {
                     </div>
                   </div>
                 `).join('') + '</div>';
+            }).catch(fetchErr => {
+              console.error('[AI] Error fetching insights:', fetchErr);
+              body.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--status-danger);">Failed to load AI insights. See console for details.</div>`;
             });
+          }).catch(importErr => {
+            console.error('[AI] Failed to load supabaseAiService module:', importErr);
+            body.innerHTML = `<div style="padding:2rem; text-align:center; color:var(--status-danger);">Unable to load AI service module. See console for details.</div>`;
           });
         }
         break;
