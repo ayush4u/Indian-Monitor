@@ -20,23 +20,55 @@ let currentAssets: {
 } | null = null;
 
 let activeTab: 'equity' | 'commodity' | 'currency' | 'crypto' | 'ai_insights' = 'equity';
-let sortCol = 'change';
+type SortColumn = 'symbol' | 'price' | 'change' | 'changePercent' | 'change7d' | 'change30d' | 'marketCap';
+let sortCol: SortColumn = 'change';
 let sortDir = -1;
 
 function sortAssets(assets: MarketAsset[]) {
   return [...assets].sort((a, b) => {
-    let valA = a[sortCol] || 0;
-    let valB = b[sortCol] || 0;
-    
-    // Special handling for change metrics if they don't exist
-    if (sortCol === 'changePercent') valA = a.changePercent || 0;
-    if (sortCol === 'change7d') valA = a.change7d || 0;
-    if (sortCol === 'change30d') valA = a.change30d || 0;
-    
-    // String compare for symbols
-    if (sortCol === 'symbol') return sortDir * a.symbol.localeCompare(b.symbol);
-    
-    return sortDir * (valA > valB ? 1 : -1);
+    let valA: number | string = 0;
+    let valB: number | string = 0;
+
+    switch (sortCol) {
+      case 'symbol':
+        return sortDir * a.symbol.localeCompare(b.symbol);
+      case 'price':
+        valA = a.price ?? 0;
+        valB = b.price ?? 0;
+        break;
+      case 'change':
+        valA = a.change ?? 0;
+        valB = b.change ?? 0;
+        break;
+      case 'changePercent':
+        valA = a.changePercent ?? 0;
+        valB = b.changePercent ?? 0;
+        break;
+      case 'change7d':
+        valA = a.change7d ?? 0;
+        valB = b.change7d ?? 0;
+        break;
+      case 'change30d':
+        valA = a.change30d ?? 0;
+        valB = b.change30d ?? 0;
+        break;
+      case 'marketCap':
+        // marketCap is a formatted string; compare as string fallback
+        valA = a.marketCap ?? '';
+        valB = b.marketCap ?? '';
+        break;
+      default:
+        valA = 0;
+        valB = 0;
+    }
+
+    // Numeric comparison when possible
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return sortDir * (valA === valB ? 0 : valA > valB ? 1 : -1);
+    }
+
+    // Fallback string compare
+    return sortDir * String(valA).localeCompare(String(valB));
   });
 }
 let activeEquitySector = 'All';
