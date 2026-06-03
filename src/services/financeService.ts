@@ -477,8 +477,25 @@ export async function fetchYahooBatch(symbols: string[]): Promise<Record<string,
 export async function fetchYahooQuote(symbol: string): Promise<YahooQuote | null> {
   try {
     const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d&includePrePost=false`;
-    const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
-    const res = await fetch(url);
+    const PROXIES = [
+      (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+      (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      (u: string) => `https://corsproxy.org/api?url=${encodeURIComponent(u)}`
+    ];
+    let res: Response | null = null;
+    for (const proxy of PROXIES) {
+      try {
+        const url = proxy(targetUrl);
+        const tempRes = await fetch(url);
+        if (tempRes.ok) {
+          res = tempRes;
+          break;
+        }
+      } catch (e) {
+        // silent
+      }
+    }
+    if (!res) return null;
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -662,8 +679,25 @@ export async function searchYahooSymbols(query: string): Promise<SearchResult[]>
   if (!query || query.trim().length < 2) return [];
   try {
     const targetUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&newsCount=0`;
-    const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
-    const res = await fetch(url);
+    const PROXIES = [
+      (u: string) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+      (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+      (u: string) => `https://corsproxy.org/api?url=${encodeURIComponent(u)}`
+    ];
+    let res: Response | null = null;
+    for (const proxy of PROXIES) {
+      try {
+        const url = proxy(targetUrl);
+        const tempRes = await fetch(url);
+        if (tempRes.ok) {
+          res = tempRes;
+          break;
+        }
+      } catch (e) {
+        // silent
+      }
+    }
+    if (!res) return [];
     if (!res.ok) throw new Error('Search failed');
 
     const data = await res.json();
