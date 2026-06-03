@@ -1,5 +1,134 @@
 // ─── Finance Service — LIVE DATA from Yahoo Finance ───
 
+const NSE_TOP_300 = [
+  {
+    "symbol": "20MICRONS.NS",
+    "name": "20 Microns Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "21STCENMGM.NS",
+    "name": "21st Century Management Services Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "360ONE.NS",
+    "name": "360 ONE WAM LIMITED",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "3BBLACKBIO.NS",
+    "name": "3B Blackbio Dx Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "3IINFOLTD.NS",
+    "name": "3i Infotech Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "3MINDIA.NS",
+    "name": "3M India Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "3PLAND.NS",
+    "name": "3P Land Holdings Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "5PAISA.NS",
+    "name": "5Paisa Capital Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "63MOONS.NS",
+    "name": "63 moons technologies limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "A2ZINFRA.NS",
+    "name": "A2Z Infra Engineering Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AAATECH.NS",
+    "name": "AAA Technologies Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AADHARHFC.NS",
+    "name": "Aadhar Housing Finance Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AARNAV.NS",
+    "name": "Aarnav Fashions Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AARON.NS",
+    "name": "Aaron Industries Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AARTECH.NS",
+    "name": "Aartech Solonics Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AARTIDRUGS.NS",
+    "name": "Aarti Drugs Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AARTIIND.NS",
+    "name": "Aarti Industries Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AARTIPHARM.NS",
+    "name": "Aarti Pharmalabs Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AARTISURF.NS",
+    "name": "Aarti Surfactants Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AARVI.NS",
+    "name": "Aarvi Encon Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "AAVAS.NS",
+    "name": "Aavas Financiers Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "ABB.NS",
+    "name": "ABB India Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "ABBOTINDIA.NS",
+    "name": "Abbott India Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "ABCAPITAL.NS",
+    "name": "Aditya Birla Capital Limited",
+    "sector": "Equity"
+  },
+  {
+    "symbol": "ABCOTS.NS",
+    "name": "A B Cotspin India Limited",
+    "sector": "Equity"
+  }
+];
+
+
 export interface StockIndex {
   name: string;
   value: number;
@@ -243,6 +372,56 @@ const CACHE_TTL = 15_000; // 15 seconds
 // Watchlist removed
 
 // ─── Core fetch for single symbol chart data (price + sparkline) ───
+
+export async function fetchYahooBatch(symbols: string[]): Promise<Record<string, YahooQuote>> {
+  const BATCH_SIZE = 50;
+  const results: Record<string, YahooQuote> = {};
+  
+  for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
+    const chunk = symbols.slice(i, i + BATCH_SIZE);
+    try {
+      const targetUrl = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunk.join(',')}&range=7d&interval=1d`;
+      const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      
+      const sparkData = data?.spark?.result || [];
+      sparkData.forEach((res: any) => {
+        const symbol = res.symbol;
+        const meta = res.response[0]?.meta;
+        const closes = res.response[0]?.indicators?.quote?.[0]?.close || [];
+        const validCloses = closes.filter((c: any) => c != null);
+        
+        if (meta) {
+          const price = meta.regularMarketPrice ?? 0;
+          const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
+          const change = price - prevClose;
+          const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+          
+          results[symbol] = {
+            price,
+            change,
+            changePercent,
+            high: meta.regularMarketDayHigh ?? price,
+            low: meta.regularMarketDayLow ?? price,
+            open: meta.regularMarketOpen ?? prevClose,
+            prevClose,
+            volume: meta.regularMarketVolume ?? 0,
+            lastUpdated: new Date().toISOString(),
+            prices: validCloses,
+            change7d: 0,
+            change30d: 0,
+          };
+        }
+      });
+    } catch (e) {
+      console.error('Batch fetch failed', e);
+    }
+  }
+  return results;
+}
+
 export async function fetchYahooQuote(symbol: string): Promise<YahooQuote | null> {
   try {
     const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1mo&interval=1d&includePrePost=false`;
@@ -540,10 +719,11 @@ export async function fetchMarketsHubAssets(): Promise<{
   }
 
   // 2. Fetch everything in parallel
-  const equitiesP = Promise.allSettled(POPULAR_OFFLINE_STOCKS.map(async s => {
-    const q = await fetchYahooQuote(s.symbol);
-    return { item: s, quote: q };
-  }));
+  
+  const ALL_EQUITIES = [...POPULAR_OFFLINE_STOCKS, ...NSE_TOP_300];
+  const uniqueEquities = Array.from(new Map(ALL_EQUITIES.map(item => [item.symbol, item])).values());
+  
+  const equitiesQuotes = await fetchYahooBatch(uniqueEquities.map(s => s.symbol));
 
   const commoditiesP = Promise.allSettled(COMMODITY_SECTOR.map(async s => {
     const q = await fetchYahooQuote(s.symbol);
@@ -560,8 +740,8 @@ export async function fetchMarketsHubAssets(): Promise<{
     return { item: s, quote: q };
   }));
 
-  const [eqRes, comRes, curRes, cryRes] = await Promise.all([
-    equitiesP, commoditiesP, currenciesP, cryptoP
+  const [comRes, curRes, cryRes] = await Promise.all([
+    commoditiesP, currenciesP, cryptoP
   ]);
 
   const equities: MarketAsset[] = [];
@@ -570,10 +750,9 @@ export async function fetchMarketsHubAssets(): Promise<{
   const crypto: MarketAsset[] = [];
 
   // Map Equities
-  eqRes.forEach((r) => {
-    if (r.status === 'fulfilled' && r.value.quote) {
-      const q = r.value.quote;
-      const s = r.value.item;
+  uniqueEquities.forEach(s => {
+    const q = equitiesQuotes[s.symbol];
+    if (q) {
       equities.push({
         symbol: s.symbol,
         name: s.name,
@@ -583,19 +762,18 @@ export async function fetchMarketsHubAssets(): Promise<{
         high: q.high,
         low: q.low,
         volume: formatVolume(q.volume),
-        marketCap: formatMarketCap(q.price * 5_000_000_000), // Approximate Cap if not retrieved
+        marketCap: formatMarketCap(q.price * 50000000), 
         sparkline: q.prices,
         category: 'equity',
         subCategory: s.sector,
         currencySymbol: '₹',
       });
-    } else if (r.status === 'fulfilled') {
-      // Fallback inside equities
-      const s = r.value.item;
-      const fb = getAssetFallback(s.symbol, s.name, 'equity', s.sector, usdInrRate);
-      equities.push(fb);
+    } else {
+      equities.push(getAssetFallback(s.symbol, s.name, 'equity', s.sector, usdInrRate));
     }
   });
+
+  // Map Commodities (already exists below)
 
   // Map Commodities
   comRes.forEach((r) => {
