@@ -841,6 +841,26 @@ export function initMarketsHubEvents(): void {
     });
   });
 
+
+  // Table Sorting
+  const hubTableContainer = document.getElementById('hubTableContainer');
+  if (hubTableContainer) {
+    hubTableContainer.addEventListener('click', (e) => {
+      const th = (e.target as HTMLElement).closest('th[data-sort]');
+      if (!th) return;
+      const col = th.getAttribute('data-sort') as SortColumn;
+      if (col) {
+        if (sortCol === col) {
+          sortDir *= -1;
+        } else {
+          sortCol = col;
+          sortDir = -1; // Default descending
+        }
+        renderActiveTabTable();
+      }
+    });
+  }
+
   // Search input events
   const searchInput = document.getElementById('hubSearchInput') as HTMLInputElement;
   const searchSuggestions = document.getElementById('hubSearchSuggestions');

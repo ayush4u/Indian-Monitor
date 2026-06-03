@@ -380,7 +380,7 @@ export async function fetchYahooBatch(symbols: string[]): Promise<Record<string,
   for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
     const chunk = symbols.slice(i, i + BATCH_SIZE);
     try {
-      const targetUrl = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunk.join(',')}&range=7d&interval=1d`;
+      const targetUrl = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunk.join(',')}&range=1mo&interval=1d`;
       const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
       const res = await fetch(url);
       if (!res.ok) continue;
@@ -399,6 +399,17 @@ export async function fetchYahooBatch(symbols: string[]): Promise<Record<string,
           const change = price - prevClose;
           const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
           
+
+          let change7d = 0;
+          let change30d = 0;
+          if (validCloses.length > 0) {
+            const last = validCloses[validCloses.length - 1];
+            const first30d = validCloses[0];
+            const first7d = validCloses[Math.max(0, validCloses.length - 6)];
+            if (first7d > 0) change7d = ((last - first7d) / first7d) * 100;
+            if (first30d > 0) change30d = ((last - first30d) / first30d) * 100;
+          }
+
           results[symbol] = {
             price,
             change,
@@ -409,9 +420,9 @@ export async function fetchYahooBatch(symbols: string[]): Promise<Record<string,
             prevClose,
             volume: meta.regularMarketVolume ?? 0,
             lastUpdated: new Date().toISOString(),
-            prices: validCloses,
-            change7d: 0,
-            change30d: 0,
+            prices: validCloses.slice(-7), // sparkline 7 days
+            change7d,
+            change30d,
           };
         }
       });
