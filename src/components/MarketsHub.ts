@@ -26,8 +26,8 @@ let sortDir = -1;
 
 function sortAssets(assets: MarketAsset[]) {
   return [...assets].sort((a, b) => {
-    let valA: number | string = 0;
-    let valB: number | string = 0;
+    let valA = (a as Record<string, any>)[sortCol] || 0;
+    let valB = (b as Record<string, any>)[sortCol] || 0;
 
     switch (sortCol) {
       case 'symbol':
