@@ -1,5 +1,29 @@
 // ─── Finance Service — LIVE DATA from Yahoo Finance ───
 
+
+const BSE_STOCKS = [
+  { symbol: "RELIANCE.BO", name: "Reliance Industries", sector: "Energy" },
+  { symbol: "TCS.BO", name: "Tata Consultancy", sector: "IT" },
+  { symbol: "HDFCBANK.BO", name: "HDFC Bank", sector: "Banking" },
+  { symbol: "INFY.BO", name: "Infosys", sector: "IT" },
+  { symbol: "ICICIBANK.BO", name: "ICICI Bank", sector: "Banking" },
+  { symbol: "SBIN.BO", name: "State Bank of India", sector: "Banking" },
+  { symbol: "BHARTIARTL.BO", name: "Bharti Airtel", sector: "Telecom" },
+  { symbol: "ITC.BO", name: "ITC Limited", sector: "FMCG" },
+  { symbol: "LT.BO", name: "Larsen & Toubro", sector: "Infra" },
+  { symbol: "BAJFINANCE.BO", name: "Bajaj Finance", sector: "Finance" },
+  { symbol: "ZOMATO.BO", name: "Zomato", sector: "Consumer" },
+  { symbol: "TATAMOTORS.BO", name: "Tata Motors", sector: "Auto" },
+  { symbol: "M&M.BO", name: "Mahindra & Mahindra", sector: "Auto" },
+  { symbol: "ASIANPAINT.BO", name: "Asian Paints", sector: "Consumer" },
+  { symbol: "HAL.BO", name: "Hindustan Aeronautics", sector: "Defence" },
+  { symbol: "SUZLON.BO", name: "Suzlon Energy", sector: "Energy" },
+  { symbol: "JIOFIN.BO", name: "Jio Financial", sector: "Finance" },
+  { symbol: "IREDA.BO", name: "Indian Renewable", sector: "Finance" },
+  { symbol: "IRFC.BO", name: "Indian Railway", sector: "Finance" },
+  { symbol: "RVNL.BO", name: "Rail Vikas Nigam", sector: "Infra" },
+];
+
 const NSE_TOP_300 = [
   {
     "symbol": "20MICRONS.NS",
@@ -374,60 +398,71 @@ const CACHE_TTL = 15_000; // 15 seconds
 // ─── Core fetch for single symbol chart data (price + sparkline) ───
 
 export async function fetchYahooBatch(symbols: string[]): Promise<Record<string, YahooQuote>> {
-  const BATCH_SIZE = 50;
+  const BATCH_SIZE = 40;
   const results: Record<string, YahooQuote> = {};
   
+  const PROXIES = [
+    (url: string) => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://corsproxy.org/api?url=${encodeURIComponent(url)}`
+  ];
+
   for (let i = 0; i < symbols.length; i += BATCH_SIZE) {
     const chunk = symbols.slice(i, i + BATCH_SIZE);
-    try {
-      const targetUrl = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunk.join(',')}&range=1mo&interval=1d`;
-      const url = `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`;
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const data = await res.json();
-      
-      const sparkData = data?.spark?.result || [];
-      sparkData.forEach((res: any) => {
-        const symbol = res.symbol;
-        const meta = res.response[0]?.meta;
-        const closes = res.response[0]?.indicators?.quote?.[0]?.close || [];
-        const validCloses = closes.filter((c: any) => c != null);
+    const targetUrl = `https://query1.finance.yahoo.com/v7/finance/spark?symbols=${chunk.join(',')}&range=1mo&interval=1d`;
+    
+    let success = false;
+    for (const proxy of PROXIES) {
+      if (success) break;
+      try {
+        const url = proxy(targetUrl);
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const data = await res.json();
         
-        if (meta) {
-          const price = meta.regularMarketPrice ?? 0;
-          const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
-          const change = price - prevClose;
-          const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+        const sparkData = data?.spark?.result || [];
+        sparkData.forEach((res: any) => {
+          const symbol = res.symbol;
+          const meta = res.response[0]?.meta;
+          const closes = res.response[0]?.indicators?.quote?.[0]?.close || [];
+          const validCloses = closes.filter((c: any) => c != null && !isNaN(c));
           
+          if (meta) {
+            const price = meta.regularMarketPrice ?? 0;
+            const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price;
+            const change = price - prevClose;
+            const changePercent = prevClose > 0 ? (change / prevClose) * 100 : 0;
+            
+            let change7d = 0;
+            let change30d = 0;
+            if (validCloses.length > 0) {
+              const last = validCloses[validCloses.length - 1];
+              const first30d = validCloses[0];
+              const first7d = validCloses[Math.max(0, validCloses.length - 6)];
+              if (first7d > 0) change7d = ((last - first7d) / first7d) * 100;
+              if (first30d > 0) change30d = ((last - first30d) / first30d) * 100;
+            }
 
-          let change7d = 0;
-          let change30d = 0;
-          if (validCloses.length > 0) {
-            const last = validCloses[validCloses.length - 1];
-            const first30d = validCloses[0];
-            const first7d = validCloses[Math.max(0, validCloses.length - 6)];
-            if (first7d > 0) change7d = ((last - first7d) / first7d) * 100;
-            if (first30d > 0) change30d = ((last - first30d) / first30d) * 100;
+            results[symbol] = {
+              price,
+              change,
+              changePercent,
+              high: meta.regularMarketDayHigh ?? price,
+              low: meta.regularMarketDayLow ?? price,
+              open: meta.regularMarketOpen ?? prevClose,
+              prevClose,
+              volume: meta.regularMarketVolume ?? 0,
+              lastUpdated: new Date().toISOString(),
+              prices: validCloses.slice(-7),
+              change7d,
+              change30d,
+            };
           }
-
-          results[symbol] = {
-            price,
-            change,
-            changePercent,
-            high: meta.regularMarketDayHigh ?? price,
-            low: meta.regularMarketDayLow ?? price,
-            open: meta.regularMarketOpen ?? prevClose,
-            prevClose,
-            volume: meta.regularMarketVolume ?? 0,
-            lastUpdated: new Date().toISOString(),
-            prices: validCloses.slice(-7), // sparkline 7 days
-            change7d,
-            change30d,
-          };
-        }
-      });
-    } catch (e) {
-      console.error('Batch fetch failed', e);
+        });
+        success = true; // Mark batch as successful so we don't retry other proxies
+      } catch (e) {
+        // silently try next proxy
+      }
     }
   }
   return results;
@@ -731,7 +766,7 @@ export async function fetchMarketsHubAssets(): Promise<{
 
   // 2. Fetch everything in parallel
   
-  const ALL_EQUITIES = [...POPULAR_OFFLINE_STOCKS, ...NSE_TOP_300];
+  const ALL_EQUITIES = [...POPULAR_OFFLINE_STOCKS, ...BSE_STOCKS, ...NSE_TOP_300];
   const uniqueEquities = Array.from(new Map(ALL_EQUITIES.map(item => [item.symbol, item])).values());
   
   const equitiesQuotes = await fetchYahooBatch(uniqueEquities.map(s => s.symbol));
