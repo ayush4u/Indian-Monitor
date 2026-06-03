@@ -386,6 +386,12 @@ const CRYPTO_SECTOR = [
   { symbol: 'ETH-INR', name: 'Ethereum (ETH)' },
   { symbol: 'BNB-INR', name: 'Binance Coin (BNB)' },
   { symbol: 'SOL-INR', name: 'Solana (SOL)' },
+  { symbol: 'XRP-INR', name: 'XRP (XRP)' },
+  { symbol: 'HYPE-USD', name: 'Hyperliquid (HYPE)' },
+  { symbol: 'ADA-INR', name: 'Cardano (ADA)' },
+  { symbol: 'DOGE-INR', name: 'Dogecoin (DOGE)' },
+  { symbol: 'SHIB-INR', name: 'Shiba Inu (SHIB)' },
+  { symbol: 'PEPE-USD', name: 'Pepe (PEPE)' }
 ];
 
 // Cache for market summary

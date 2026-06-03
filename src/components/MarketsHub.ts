@@ -448,6 +448,7 @@ function renderCrypto(assets: MarketAsset[]): string {
               <td>
                 <div class="asset-identity">
                   <span class="asset-symbol">${a.name}</span>
+                  ${a.symbol.includes('HYPE') ? `<span style="background: linear-gradient(90deg, #3b82f6, #8b5cf6); color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 8px; font-weight: bold; letter-spacing: 0.5px; box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);">✨ AI FORECAST: +30% Expected</span>` : ''}
                   <span class="asset-name-sub">${a.symbol}</span>
                 </div>
               </td>
